@@ -52,6 +52,7 @@ namespace Ubidots
         /// </summary>
         private void ReceiveToken()
         {
+            UnityEngine.Debug.Log(PostWithApiKey("auth/token"));
             Token = (string) JObject.Parse(PostWithApiKey("auth/token")).GetValue("token");
 
             TokenHeader = new WebHeaderCollection();
@@ -90,13 +91,18 @@ namespace Ubidots
                 Request.Method = "POST";
                 Request.Headers = Headers;
                 Request.ContentType = "application/json";
-
+                UnityEngine.Debug.Log("enter1");
                 using (HttpWebResponse WebResponse = Request.GetResponse() as HttpWebResponse)
                 {
+                    UnityEngine.Debug.Log("enter2");
+
                     using (Stream ResponseStream = WebResponse.GetResponseStream())
                     {
+                        UnityEngine.Debug.Log("enter3");
+
                         StreamReader Reader = new StreamReader(ResponseStream, Encoding.UTF8);
                         Response = Reader.ReadToEnd();
+                        UnityEngine.Debug.Log(Response);
                         return Response;
                     }
                 }
