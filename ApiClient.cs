@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
+using UnityEngine;
+//using System.Linq;
+//using System.Text;
+//using System.Threading.Tasks;
+//using Newtonsoft.Json;
 
 namespace Ubidots
 {
@@ -11,7 +13,14 @@ namespace Ubidots
     {
         private ServerBridge Bridge;
 
+        private DataSource dataSource;
+
         public ApiClient(string ApiKey)
+        {
+            Bridge = new ServerBridge(ApiKey);
+        }
+
+        public ApiClient(string ApiKey, System.Action onClomplete)
         {
             Bridge = new ServerBridge(ApiKey);
         }
@@ -21,11 +30,16 @@ namespace Ubidots
             Bridge = new ServerBridge(ApiKey, BaseUrl);
         }
 
+        public IEnumerator StartService(System.Action onClomplete)
+        {
+            yield return Extender.Instance.StartCoroutine(Bridge.ServerBridgeStart(onClomplete));
+        }
+
         /// <summary>
         /// Gets the ServerBridge used in this ApiClient.
         /// </summary>
         /// <returns>The ServerBridge used in this ApiClient</returns>
-        internal ServerBridge GetServerBridge() 
+        internal ServerBridge GetServerBridge()
         {
             return Bridge;
         }
@@ -34,12 +48,12 @@ namespace Ubidots
         /// Gets all the DataSources in the user account.
         /// </summary>
         /// <returns>A list with all the DataSources</returns>
-        public DataSource[] GetDataSources()
+        public IEnumerator GetDataSources(System.Action<DataSource[]> dataSources)
         {
-            string Json = Bridge.Get("datasources");
+            var outputMessage = "";
+            yield return Extender.Instance.StartCoroutine(Bridge.Get("datasources", result => outputMessage = result));
 
-            List<Dictionary<string, object>> RawValues =
-                JsonConvert.DeserializeObject <List<Dictionary<string, object>>>(Json);
+            List<ServerBridge.JsonData> RawValues = JsonUtility.FromJson<List<ServerBridge.JsonData>>(outputMessage);
 
             DataSource[] DataSources = new DataSource[RawValues.Count];
 
@@ -48,40 +62,39 @@ namespace Ubidots
                 DataSources[i] = new DataSource(RawValues[i], this);
             }
 
-
-            return DataSources;
+            dataSources(DataSources);
         }
+
 
         /// <summary>
         /// Gets a single DataSource in the user account
         /// </summary>
         /// <param name="Id">The DataSource Id</param>
         /// <returns>The DataSource wanted by the user</returns>
-        public DataSource GetDataSource(string Id)
+        public IEnumerator GetDataSource(string Id, System.Action<DataSource> dataSources)
         {
-            string Json = Bridge.Get("datasources/" + Id);
+            var outputMessage = "";
+            yield return Extender.Instance.StartCoroutine(Bridge.Get("datasources/" + Id, result => outputMessage = result));
 
-            Dictionary<string, object> RawValues =
-                JsonConvert.DeserializeObject<Dictionary<string, object>>(Json);
+            ServerBridge.JsonData RawValues = JsonUtility.FromJson<ServerBridge.JsonData>(outputMessage);
 
-            if (RawValues.ContainsKey("detail"))
+            if (!string.IsNullOrEmpty(RawValues.detail) || !string.IsNullOrEmpty(RawValues.details))
             {
-                return null;
+                dataSources(null);
             }
             else
             {
-                return new DataSource(RawValues, this);
+                dataSources(new DataSource(RawValues, this));
             }
         }
-
         /// <summary>
         /// Creates a DataSource in the user account
         /// </summary>
         /// <param name="Name">The name of the DataSource</param>
         /// <returns>The newly created DataSource</returns>
-        public DataSource CreateDataSource(string Name)
+        public IEnumerator CreateDataSource(string Name, System.Action<DataSource> values)
         {
-            return CreateDataSource(Name, null, null);
+            yield return Extender.Instance.StartCoroutine(CreateDataSource(Name, null, null, values));
         }
 
         /// <summary>
@@ -91,9 +104,11 @@ namespace Ubidots
         /// <param name="Context">The context of the DataSource</param>
         /// <param name="Tags">The tags of the DataSource</param>
         /// <returns>The newly created DataSource</returns>
-        public DataSource CreateDataSource(string Name, 
-            Dictionary<string, string> Context, string[] Tags)
+        public IEnumerator CreateDataSource(string Name, Dictionary<string, string> Context, string[] Tags, System.Action<DataSource> values)
         {
+
+            var outputMessage = "";
+
             if (Name == null)
             {
                 throw new ArgumentNullException();
@@ -108,24 +123,34 @@ namespace Ubidots
             if (Tags != null)
                 Data.Add("tags", Tags);
 
-            string Json = Bridge.Post("datasources/", 
-                JsonConvert.SerializeObject(Data));
+            yield return Extender.Instance.StartCoroutine(Bridge.Post("datasources/", JsonUtility.ToJson(Data), result => outputMessage = result));
 
-            DataSource Var = new DataSource(JsonConvert.DeserializeObject<Dictionary<string, object>>(Json), this);
+            DataSource Var = new DataSource(JsonUtility.FromJson<ServerBridge.JsonData>(outputMessage), this);
 
-            return Var;
+            values(Var);
+        }
+
+        public string GetToken()
+        {
+            return Bridge.GetToken();
+        }
+
+        public void SetDefaultToken(string token)
+        {
+            Bridge.SetDefaultToken(token);
         }
 
         /// <summary>
         /// Get all the variables of the user account
         /// </summary>
         /// <returns>A list with all the variables</returns>
-        public Variable[] GetVariables()
+        public IEnumerator GetVariables(System.Action<Variable[]> variable, float size = 20)
         {
-            string Json = Bridge.Get("variables");
+            var outputMessage = "";
+            yield return Extender.Instance.StartCoroutine(Bridge.Get("variables/" + "?page=1&page_size=" + (size <= 0 ? 20 : size), result => outputMessage = result));
 
-            List<Dictionary<string, object>> RawValues =
-                JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Json);
+
+            List<ServerBridge.JsonData> RawValues = JsonUtility.FromJson<List<ServerBridge.JsonData>>(outputMessage);
 
             Variable[] Variables = new Variable[RawValues.Count];
 
@@ -134,28 +159,50 @@ namespace Ubidots
                 Variables[i] = new Variable(RawValues[i], this);
             }
 
-            return Variables;
+            variable(Variables);
         }
+
+        ///// <summary>
+        ///// Get a specific Variable in the user account
+        ///// </summary>
+        ///// <param name="Id">The ID of the Variable</param>
+        ///// <returns>The Variable with that ID</returns>
+        //public IEnumerator SetVariable(string Id, System.Action<Variable> variable)
+        //{
+        //    var outputMessage = "";
+        //    yield return Extender.Instance.StartCoroutine(Bridge.Get("variables/" + Id + "/values/", result => outputMessage = result));
+
+        //    ServerBridge.JsonData RawValues = JsonUtility.FromJson<ServerBridge.JsonData>(outputMessage);
+
+        //    if (!string.IsNullOrEmpty(RawValues.detail) || !string.IsNullOrEmpty(RawValues.details))
+        //    {
+        //        variable(null);
+        //    }
+        //    else
+        //    {
+        //        variable(new Variable(RawValues, this));
+        //    }
+        //}
 
         /// <summary>
         /// Get a specific Variable in the user account
         /// </summary>
         /// <param name="Id">The ID of the Variable</param>
         /// <returns>The Variable with that ID</returns>
-        public Variable GetVariable(string Id)
+        public IEnumerator GetVariable(string Id, System.Action<Variable> variable)
         {
-            string Json = Bridge.Get("variables/" + Id);
+            var outputMessage = "";
+            yield return Extender.Instance.StartCoroutine(Bridge.Get("variables/" + Id, result => outputMessage = result));
 
-            Dictionary<string, object> RawValues =
-                JsonConvert.DeserializeObject<Dictionary<string, object>>(Json);
+            ServerBridge.JsonData RawValues = JsonUtility.FromJson<ServerBridge.JsonData>(outputMessage);
 
-            if (RawValues.ContainsKey("details"))
+            if (!string.IsNullOrEmpty(RawValues.detail) || !string.IsNullOrEmpty(RawValues.details))
             {
-                return null;
+                variable(null);
             }
             else
             {
-                return new Variable(RawValues, this);
+                variable(new Variable(RawValues, this));
             }
         }
 

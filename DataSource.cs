@@ -1,15 +1,17 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
+using UnityEngine;
+//using System.Linq;
+//using System.Text;
+//using System.Threading.Tasks;
+//using Newtonsoft.Json;
 
 namespace Ubidots
 {
     public class DataSource : ApiObject
     {
-        public DataSource(Dictionary<string, object> Raw, ApiClient Api) : base(Raw, Api) { }
+        public DataSource(ServerBridge.JsonData Raw, ApiClient Api) : base(Raw, Api) { }
 
         /// <summary>
         /// Get the name of the Datasource
@@ -17,7 +19,8 @@ namespace Ubidots
         /// <returns>The name of the Datasource</returns>
         public string GetName()
         {
-            return GetAttributeString("name");
+            return GetRawDictionary().name;
+            //return GetAttributeString("name");
         }
 
         /// <summary>
@@ -32,12 +35,12 @@ namespace Ubidots
         /// Get the Variables of a Datasource
         /// </summary>
         /// <returns>The list of Variables in a Datasource</returns>
-        public Variable[] GetVariables()
+        public IEnumerator GetVariables(System.Action<Variable[]> variable)
         {
-            string Json = Bridge.Get("datasources/" + GetId() + "/variables");
+            var outputMessage = "";
+            yield return Extender.Instance.StartCoroutine(Bridge.Get("datasources/" + GetId() + "/variables", result => outputMessage = result));
 
-            List<Dictionary<string, object>> RawValues =
-                JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(Json);
+            List<ServerBridge.JsonData> RawValues = JsonUtility.FromJson<List<ServerBridge.JsonData>>(outputMessage);
 
             Variable[] Variables = new Variable[RawValues.Count];
 
@@ -46,7 +49,7 @@ namespace Ubidots
                 Variables[i] = new Variable(RawValues[i], Api);
             }
 
-            return Variables;
+            variable(Variables);
         }
 
         /// <summary>
@@ -54,9 +57,9 @@ namespace Ubidots
         /// </summary>
         /// <param name="Name">The name of the new Variable</param>
         /// <returns>The newly created Variable</returns>
-        public Variable CreateVariable(string Name)
+        public IEnumerator CreateVariable(string Name, System.Action<Variable> variable)
         {
-            return CreateVariable(Name, null, null, null, null);
+            yield return Extender.Instance.StartCoroutine(CreateVariable(Name, null, null, null, null, variable));
         }
 
         /// <summary>
@@ -69,10 +72,10 @@ namespace Ubidots
         /// <param name="Properties">The properties of the new Variable</param>
         /// <param name="Tags">The tags of the new Variable</param>
         /// <returns>The newly created Variable</returns>
-        public Variable CreateVariable(string Name, string Unit, 
-            string Description, Dictionary<string, string> Properties, 
-            string[] Tags)
+        public IEnumerator CreateVariable(string Name, string Unit, string Description, Dictionary<string, string> Properties, string[] Tags, System.Action<Variable> variable)
         {
+            var outputMessage = "";
+
             if (Name == null)
             {
                 throw new ArgumentNullException();
@@ -93,12 +96,11 @@ namespace Ubidots
             if (Tags != null)
                 Data.Add("tags", Tags);
 
-            string Json = Bridge.Post("datasources/" + GetId() + "/variables",
-                JsonConvert.SerializeObject(Data));
+            yield return Extender.Instance.StartCoroutine(Bridge.Post("datasources/" + GetId() + "/variables", JsonUtility.ToJson(Data), result => outputMessage = result));
 
-            Variable Var = new Variable(JsonConvert.DeserializeObject<Dictionary<string, object>>(Json), Api);
+            Variable Var = new Variable(JsonUtility.FromJson<ServerBridge.JsonData>(outputMessage), Api);
 
-            return Var;
+            variable(Var);
         }
     }
 }

@@ -8,35 +8,41 @@ namespace Ubidots
 {
     public class ApiObject
     {
-        private Dictionary<string, object> Raw;
+        private ServerBridge.JsonData Raw;
         protected ApiClient Api;
         protected ServerBridge Bridge;
 
-        public ApiObject(Dictionary<string, object> Raw, ApiClient Api)
+        public ApiObject(ServerBridge.JsonData Raw, ApiClient Api)
         {
             this.Raw = Raw;
             this.Api = Api;
             Bridge = Api.GetServerBridge();
         }
 
-        protected string GetAttributeString(string Attribute)
+        protected ServerBridge.JsonData GetRawDictionary()
         {
-            return (string)Raw[Attribute];
+            return Raw;
         }
 
-        protected double GetAttributeDouble(string Attribute)
-        {
-            return (double)Raw[Attribute];
-        }
+        //protected string GetAttributeString(string Attribute)
+        //{
+        //    return (string)Raw[Attribute];
+        //}
 
-        protected object GetAttribute(string Attribute)
-        {
-            return Raw[Attribute];
-        }
+        //protected double GetAttributeDouble(string Attribute)
+        //{
+        //    return (double)Raw[Attribute];
+        //}
+
+        //protected object GetAttribute(string Attribute)
+        //{
+        //    return Raw[Attribute];
+        //}
 
         protected string GetId()
         {
-            return (string)Raw["id"];
+            //return (string)Raw["id"];
+            return Raw.id;
         }
     }
 }
